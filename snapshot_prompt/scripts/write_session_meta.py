@@ -1,6 +1,6 @@
 """
 Date: 2026-05-14
-Creator: Claude Code (snapshot-prompt plugin)
+Creator: Claude Code (snapshot-prompt skill)
 Purpose: 给 Claude Code session jsonl 写侧车 meta.json，便于 /snapshot-prompt skill 跨会话识别历史 session。
          两种模式：(1) SessionEnd hook 模式 —— 从 stdin 读 hook context，处理单个 session；
          (2) --backfill 模式 —— 扫 ~/.claude/projects/* 下所有 jsonl，给没有 meta 的补一份。

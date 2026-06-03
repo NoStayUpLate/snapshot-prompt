@@ -5,8 +5,8 @@ description: 为本次 AI 会话生成提示词存证/总结文件（核心汇�
 
 <!--
 Date: 2026-05-14
-Creator: Claude Code (snapshot-prompt plugin)
-Purpose: Claude Code skill —— 团队 AI 协作"提示词存证"流程的执行规范（plugin 版，命名规范已内联，无外部仓库依赖）
+Creator: Claude Code (snapshot-prompt skill)
+Purpose: Claude Code skill —— 团队 AI 协作"提示词存证"流程的执行规范（命名规范已内联，无外部仓库依赖）
 -->
 
 # Snapshot Prompt — 提示词存证 Skill
@@ -45,16 +45,20 @@ Purpose: Claude Code skill —— 团队 AI 协作"提示词存证"流程的执�
 
 > ⚠️ 一个完整任务常跨多次 Claude Code 会话才完成（设计 → 实现 → 测试 → 修复）。仅取当前会话会丢前几轮的决策语境。
 
-机制：本 plugin 注册的 SessionEnd hook（脚本 `${CLAUDE_PLUGIN_ROOT}/scripts/write_session_meta.py`）会在每次 session 结束时写一份侧车 `<uuid>.meta.json`（与 jsonl 同目录，即 `~/.claude/projects/<proj>/` 下），包含 `session_id` / `git_branch` / `cwd` / `timestamp` / `first_message_excerpt` / `user_turns` 等字段——这是历史会话候选的索引。**此外，skill 触发时会先自动跑一次 `--backfill`（见下方步骤 1）补齐插件安装前 / 异常退出漏写的会话**，因此装好后**首次**取历史即可看到当前项目的全部历史会话，无需等新会话逐个结束。
+机制：用户在 `~/.claude/settings.json` 中配置的 SessionEnd hook（参见仓库根 README「可选：启用跨会话历史」段）会在每次 session 结束时调用脚本 [`scripts/write_session_meta.py`](../../scripts/write_session_meta.py)，写一份侧车 `<uuid>.meta.json`（与 jsonl 同目录，即 `~/.claude/projects/<proj>/` 下），包含 `session_id` / `git_branch` / `cwd` / `timestamp` / `first_message_excerpt` / `user_turns` 等字段——这是历史会话候选的索引。**此外，skill 触发时会先尝试自动跑一次 `--backfill`（见下方步骤 1）补齐 hook 注册前 / 异常退出漏写的会话**；当用户未配置 hook、或 backfill 也找不到脚本时，本步降级跳过，picker 列表会为空——此时应提示用户参考仓库根 README「可选：启用跨会话历史」段启用。
 
-> ℹ️ **hook 由 plugin 安装时自动注册**，无需用户手动配置 `~/.claude/settings.json`。脚本随 plugin 分发，源真值见同仓 [`scripts/write_session_meta.py`](../../scripts/write_session_meta.py)。若装好 plugin 后 meta 文件不生成，见仓库根 [README.md](../../../README.md) 的"故障排查"段（多半是 hook 命令里的 `python` 不存在或不指向 3.7+）。
+> ℹ️ **本 skill 不会自动改用户的 `~/.claude/settings.json`**——SessionEnd hook 由用户按 README 指引手动注册。脚本本身随 skill 分发，源真值见同仓 [`scripts/write_session_meta.py`](../../scripts/write_session_meta.py)。若用户已配置 hook 但 meta 文件不生成，见仓库根 [README.md](../../../README.md) 的"故障排查"段（多半是 hook 命令里的 `python` 不存在或不指向 3.7+）。
 
 skill 触发时按以下步骤选择历史会话：
 
-1. **自动补齐索引（backfill）**：先用 `Glob` 找已安装脚本 `~/.claude/plugins/cache/*/snapshot-prompt/*/scripts/write_session_meta.py`（`*` 兼容 marketplace 名与版本号，多个匹配取最新一个）。找到则用 Bash 跑 `python "<脚本路径>" --backfill`（若 `python` 不在，依次试 `py -3` / `python3`，见仓库根 README「跨平台说明」），给所有**缺 meta 的历史 jsonl**（含插件安装前就存在、或异常退出没触发 SessionEnd hook 的会话）补侧车索引。这一步让「装好后首次取历史」就能看到当前项目的全部历史会话，而不只是装后新结束的。
+1. **自动补齐索引（backfill）**：先用 `Glob` 查找脚本路径，按以下顺序尝试：
+   - `~/.claude/skills/snapshot-prompt/scripts/write_session_meta.py`（用户全局安装到 `~/.claude/skills/` 的情形）
+   - 当前仓库内 `**/snapshot_prompt/scripts/write_session_meta.py`（在仓库根直接加载 skill 的情形）
+
+   找到则用 Bash 跑 `python "<脚本路径>" --backfill`（若 `python` 不在，依次试 `py -3` / `python3`，见仓库根 README「故障排查」），给所有**缺 meta 的历史 jsonl**（含 hook 注册前就存在、或异常退出没触发 SessionEnd hook 的会话）补侧车索引。这一步让首次取历史就能看到当前项目的全部历史会话，而不只是 hook 注册后新结束的。
    - **幂等**：已有 meta 的会话只做一次 `exists()` 判断即 skip、不读 jsonl，稳态开销可忽略，所以每次触发都跑无妨。
-   - **降级**：Glob 找不到脚本（非插件方式安装本 skill）或无可用 python → **跳过本步**，用现有 meta 继续，**不报错中断**。
-   - backfill 可能给「当前仍在进行的会话」也写一份**部分** meta，无妨：它在第 4 步按 session_id 被排除出 picker，且会在本会话 SessionEnd 时被 `force=True` 覆盖刷新。
+   - **降级**：Glob 找不到脚本（例如用户只把 SKILL.md 单文件丢进去、没带 `scripts/` 目录）或无可用 python → **跳过本步**，用现有 meta 继续，**不报错中断**；若后续 picker 为空，向用户提示参考仓库根 README「可选：启用跨会话历史」段。
+   - backfill 可能给「当前仍在进行的会话」也写一份**部分** meta，无妨：它在第 4 步按 session_id 被排除出 picker，且会在本会话 SessionEnd 时被 `force=True` 覆盖刷新（前提是 hook 已配置）。
 2. 用 `Glob` 扫 `~/.claude/projects/*/[0-9a-f]*.meta.json`（顶级文件，非 `subagents/`）；当前会话 cwd 通过 `git status` 或 system context 拿到
 3. 过滤：**始终**保留 `cwd` 与当前一致的 meta。**若当前在 git 仓**（拿得到当前分支），再优先按 `git_branch` 与当前分支一致过滤（跨分支也是常态——若你要纳入异分支会话需用户在 picker 里显式勾选）；**若不在 git 仓 / 拿不到分支**，跳过分支过滤，仅按 `cwd`
 4. 按 `timestamp` 倒序取最近 **10** 个候选，**排除当前会话本身**
@@ -237,17 +241,17 @@ skill 触发时按以下步骤选择历史会话：
 
 ## 附录 A：write_session_meta.py 脚本
 
-跨会话历史能力依赖一个 SessionEnd hook + 一个 Python 脚本。本 plugin 已把二者打包：
+跨会话历史能力依赖一个 SessionEnd hook + 一个 Python 脚本。本 skill 把二者随仓库分发：
 
 - **脚本**：[`scripts/write_session_meta.py`](../../scripts/write_session_meta.py)（同仓，~120 行 stdlib-only Python 3.7+，源真值；**不再内嵌于本文件**，避免双份维护）
-- **hook 声明**：[`hooks/hooks.json`](../../hooks/hooks.json)（plugin 安装时由框架自动注册 SessionEnd hook，命令通过 `${CLAUDE_PLUGIN_ROOT}` 引用上面脚本）
+- **hook 配置模板**：[`hooks/hooks.json`](../../hooks/hooks.json)（参考片段；用户按仓库根 README「可选：启用跨会话历史」段手动注册到 `~/.claude/settings.json`，把 `${CLAUDE_PLUGIN_ROOT}` 占位符替换为脚本所在目录的绝对路径）
 
 脚本两种模式：
 
 - **SessionEnd hook 模式**（默认，无参数）：从 stdin 读 hook context，定位本 session 的 jsonl，写侧车 `<uuid>.meta.json`
-- **`--backfill` 模式**：扫 `~/.claude/projects/*` 下所有 jsonl，给没有 meta 的补一份（已有 meta 的 skip，幂等）。**skill 现在每次触发会自动跑一次 backfill（见 §跨会话历史选择 步骤 1），所以手动跑通常已无必要**；仅在排障、或想脱离 skill 立即建索引时手动执行：
+- **`--backfill` 模式**：扫 `~/.claude/projects/*` 下所有 jsonl，给没有 meta 的补一份（已有 meta 的 skip，幂等）。**skill 现在每次触发会自动尝试跑一次 backfill（见 §跨会话历史选择 步骤 1），所以手动跑通常已无必要**；仅在排障、初次启用 hook、或想脱离 skill 立即建索引时手动执行：
   ```
-  python <plugin安装路径>/scripts/write_session_meta.py --backfill
+  python <脚本绝对路径>/write_session_meta.py --backfill
   ```
 
 故障排查见仓库根 [README.md](../../../README.md) 的"故障排查"段。

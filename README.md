@@ -1,14 +1,12 @@
 <!--
-Date: 2026-06-02
-Creator: Claude Code (snapshot-prompt plugin)
-Purpose: 单一权威 README —— 市场介绍 + 安装 + 用法 + 故障排查 + 隐私 + 维护，面向所有读者（使用者 / 维护者）。AI 执行规范另见 SKILL.md。
+Date: 2026-06-03
+Creator: Claude Code (snapshot-prompt skill)
+Purpose: 单一权威 README —— 介绍 + 安装 + 用法 + 故障排查 + 隐私 + 维护，面向所有读者（使用者 / 维护者）。AI 执行规范另见 SKILL.md。
 -->
 
-# xinguan-analysis · snapshot-prompt 插件
+# snapshot-prompt
 
-一个 **Claude Code plugin marketplace**（市场名 `xinguan-analysis`），收录一个 plugin：
-
-- **`snapshot-prompt`** —— 为本次 AI 会话生成一份"提示词存证/总结"markdown，留存为可追溯、可复现的文件。在 git 仓里可随分支进 git、作为 PR / MR 评审凭据与未来复现指南；不在 git 仓也能独立使用（留本地、贴 wiki / 知识库均可）。
+一个 **Claude Code skill**：为本次 AI 会话生成一份"提示词存证 / 总结" markdown，留存为可追溯、可复现的文件。在 git 仓里可随分支进 git、作为 PR / MR 评审凭据与未来复现指南；不在 git 仓也能独立使用（留本地、贴 wiki / 知识库均可）。
 
 > 📑 本文件是**唯一面向人的说明**（介绍 / 安装 / 用法 / 故障排查 / 维护）。另有一份 [`snapshot_prompt/skills/snapshot-prompt/SKILL.md`](snapshot_prompt/skills/snapshot-prompt/SKILL.md) 是 **AI 执行规范**（Claude Code 加载它来驱动 `/snapshot-prompt` 的行为），不是给人读的，一般无需打开。
 
@@ -16,21 +14,20 @@ Purpose: 单一权威 README —— 市场介绍 + 安装 + 用法 + 故障排�
 
 ## 目录
 
-- [这个插件解决什么问题](#这个插件解决什么问题)
-- [安装（离线 zip，零认证）](#安装离线-zip零认证)
+- [这个 skill 解决什么问题](#这个-skill-解决什么问题)
+- [安装](#安装)
 - [怎么用](#怎么用)
 - [产物长什么样](#产物长什么样)
 - [典型场景](#典型场景)
 - [故障排查](#故障排查)
 - [隐私边界](#隐私边界)
-- [跨平台说明（hook 解释器）](#跨平台说明hook-解释器)
+- [可选：启用跨会话历史（手动注册 SessionEnd hook）](#可选启用跨会话历史手动注册-sessionend-hook)
 - [自定义落盘目录](#自定义落盘目录)
 - [仓库结构](#仓库结构)
-- [维护：打包分发 zip](#维护打包分发-zip)
 
 ---
 
-## 这个插件解决什么问题
+## 这个 skill 解决什么问题
 
 你在 Claude Code 里完成一段 AI 协助的多轮工作（写了代码、跑了分析、整理了文档），想留个底。问题是：
 
@@ -41,48 +38,43 @@ Purpose: 单一权威 README —— 市场介绍 + 安装 + 用法 + 故障排�
 `/snapshot-prompt` 一次性解决这三件事，核心能力：
 
 - **四段式存证**：核心提示词汇总 / 规范快照 / AI 关键决策复文 / 用户消息原文。
-- **跨会话历史**：一个任务跨多次 Claude Code 会话时，可把历史会话一并纳入（靠随 plugin 注册的 SessionEnd hook + 触发时自动 backfill 建索引，**含安装插件前就存在的历史会话**）。
+- **跨会话历史（可选）**：一个任务跨多次 Claude Code 会话时，可把历史会话一并纳入。需配置一段 SessionEnd hook（见下文「可选：启用跨会话历史」），未配置时 picker 列表会为空，但 skill 主流程仍可正常使用——只是缺历史 session 这一项。
 - **敏感信息脱敏**：落盘前扫描密码 / 连接串 / 手机号 / 邮箱等，代码块默认折叠（反向授权）。
 - **不碰 git**：只生成文件，如何归档（进 git / 留本地 / 贴 wiki）由你自己决定。
 
-## 安装（离线 zip，零认证）
+## 安装
 
-本 plugin 以离线 zip 分发，**不需要 GitLab 账号、SSH key 或访问令牌**——拿到 zip 解压即可装。
+本仓库就是一个 Claude Code skill。最简安装：把 `snapshot_prompt/skills/snapshot-prompt/` 目录放到 Claude Code 能加载到的位置即可。
 
-**第 1 步：解压**
+**最快的两条路：**
 
-把发给你的 `snapshot-prompt-plugin.zip` 解压到任意目录，例如解压后得到 `D:\tools\snapshot-prompt\`（里面应能看到 `.claude-plugin\marketplace.json` 和 `snapshot_prompt\` 子目录）。
+**A. 直接 clone 后用 Claude Code 加载（推荐）**
 
-> 解压不需要命令行——Windows 右键 zip →「全部解压」即可。
-
-**第 2 步：注册并安装**
-
-> 💭 **为什么解压后还要这两条命令、不能直接把文件夹丢进 skills 目录?** 直接丢 skill 文件夹确实能让 `/snapshot-prompt` 可用，但**会丢掉"跨会话历史"能力**——那个功能靠插件里的 SessionEnd hook，只有走 `marketplace add` + `install` 才会注册 hook。所以要完整功能，就走下面这步。
-
-> ⚠️ `/plugin` 是交互式命令，**只在独立终端的 `claude` REPL 里可用**；在 VSCode / Cursor 等 IDE 内嵌对话里会报 `/plugin isn't available`。IDE 里改用下面的 `claude plugin ...` 命令行子命令。
-
-把下面命令里的路径换成你第 1 步的**实际解压目录**：
-
-```
-# 独立终端 REPL：
-/plugin marketplace add D:\tools\snapshot-prompt
-/plugin install snapshot-prompt@xinguan-analysis
-
-# IDE 内嵌对话 / 集成终端：
-claude plugin marketplace add D:\tools\snapshot-prompt
-claude plugin install snapshot-prompt@xinguan-analysis
+```bash
+git clone git@github.com:NoStayUpLate/snapshot-prompt.git
 ```
 
-> 💡 **不想记命令?** 在 IDE 对话里直接发这段话，让 Claude 替你执行：
-> > 请帮我安装 snapshot-prompt 插件，解压目录是 `D:\tools\snapshot-prompt`（换成你的实际路径）。在终端执行 `claude plugin marketplace add <该目录>` 和 `claude plugin install snapshot-prompt@xinguan-analysis`，装完用 `claude plugin list` 确认状态是 enabled，再告诉我是否需要重启。
+clone 下来后，在该仓库目录下打开 Claude Code，skill 应能被自动发现（`/snapshot-prompt` 会出现在可用 skill 列表中）。这是最干净的用法——skill 跟仓库走，不污染 `~/.claude/`。
 
-**第 3 步：重启 Claude Code**
+**B. 全局安装到 `~/.claude/skills/`**
 
-让随 plugin 注册的 SessionEnd hook 生效。装好后输入 `/snapshot-prompt` 即可使用。
+希望任何项目目录下都能调用 `/snapshot-prompt`：
 
-> ℹ️ **关于更新**：zip 是离线快照，**不会自动更新**。插件有新版本时，需重新获取 zip、解压覆盖，再 `claude plugin marketplace update xinguan-analysis`（或移除后重新 add）。
->
-> ℹ️ **解压目录别删**：`marketplace add` 注册的是该目录的引用，不是把文件拷进 Claude Code。删掉解压目录会导致插件失效——建议放一个固定位置（如 `D:\tools\snapshot-prompt\`）长期保留。
+```bash
+# Linux / macOS
+mkdir -p ~/.claude/skills
+cp -r snapshot_prompt/skills/snapshot-prompt ~/.claude/skills/
+
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force ~\.claude\skills | Out-Null
+Copy-Item -Recurse snapshot_prompt\skills\snapshot-prompt ~\.claude\skills\
+```
+
+**第二步：重启 Claude Code**
+
+让新 skill 被发现。装好后输入 `/snapshot-prompt` 即可使用。
+
+> ℹ️ **可选：启用跨会话历史能力**——上述安装步骤足以让 `/snapshot-prompt` 跑起来，但「跨会话历史」picker 会一直为空（因为没人写 meta 索引）。要恢复该能力，请按下文 [可选：启用跨会话历史（手动注册 SessionEnd hook）](#可选启用跨会话历史手动注册-sessionend-hook) 配置一段 hook，整个步骤 5 分钟内可完成。
 
 ## 怎么用
 
@@ -104,7 +96,7 @@ skill 会按顺序问你 4 件事：
 
 | 步骤 | 提示 | 你需要做什么 |
 | --- | --- | --- |
-| **1. 历史会话选择** | "纳入哪些历史会话到本次存证的 §4？（多选，可全不选）" | 列出最近 10 个**同项目**的会话（在 git 仓里再叠加"同分支"过滤）（带时间 + 首条消息摘要 + 轮数），勾选要纳入的。**只本机自己的会话**，看不到同事的。一次任务跨 2-3 个 session 是常态，要勾上 |
+| **1. 历史会话选择** | "纳入哪些历史会话到本次存证的 §4？（多选，可全不选）" | 列出最近 10 个**同项目**的会话（在 git 仓里再叠加"同分支"过滤）（带时间 + 首条消息摘要 + 轮数），勾选要纳入的。**只本机自己的会话**，看不到同事的。一次任务跨 2-3 个 session 是常态，要勾上。**未启用跨会话历史 hook 时此列表为空**——见上方[可选段](#可选启用跨会话历史手动注册-sessionend-hook) |
 | **2. 主题确认** | "本次存证的主题字段（5-15 字中文），会进文件名" | skill 给一个候选；你觉得准就选，不准点 Other 自己写 |
 | **3. 敏感信息脱敏** | "发现以下敏感字段，怎么处理？" | 只有命中（密码 / 手机号 / DSN / 邮箱等）时才弹；逐项决定占位符替换还是原样保留 |
 | **4. 代码块恢复** | "以下代码块已默认折叠为 `<REDACTED:credential_block>`，哪些恢复原文？" | 反向授权设计 —— 默认折叠所有代码块，你手动勾"确认无敏感字段"的才恢复 |
@@ -140,32 +132,34 @@ Header / 元信息
 
 ## 典型场景
 
-**单 session 完成的小 feature**（改了一个 ROI 报表的特征工程脚本，今天起意今天完工）：触发 `/snapshot-prompt` → 历史会话**全不选** → 主题"重构ROI周报特征工程" → 脱敏 / 折叠按提示走 → 产物按需归档（在 git 仓就和代码一起 commit，不在就留本地）。
+**单 session 完成的小 feature**（改了一个 ROI 报表的特征工程脚本，今天起意今天完工）：触发 `/snapshot-prompt` → 历史会话**全不选**（或未启用 hook 时列表为空，直接跳过）→ 主题"重构ROI周报特征工程" → 脱敏 / 折叠按提示走 → 产物按需归档（在 git 仓就和代码一起 commit，不在就留本地）。
 
-**跨 3 个 session 的复杂任务**（周一设计 → 周三实现 → 周五修 bug）：周五最后改完后触发 → 历史会话**多选周一和周三的两个 session** → 主题归纳整体目标 → §1 会跨 3 个 session 挑出最实质的 5-15 条提示词 → 产物里既有最终改动语境，也保留"周一的设计思路"和"周三遇到的坑"。
+**跨 3 个 session 的复杂任务**（周一设计 → 周三实现 → 周五修 bug）：**前提是已启用跨会话历史 hook**——周五最后改完后触发 → 历史会话**多选周一和周三的两个 session** → 主题归纳整体目标 → §1 会跨 3 个 session 挑出最实质的 5-15 条提示词 → 产物里既有最终改动语境，也保留"周一的设计思路"和"周三遇到的坑"。
 
 **Debug 时**：不要用。debug 代码本身就是临时的，存证没意义。
 
 ## 故障排查
 
-**Q：装好 plugin 后，`/snapshot-prompt` 的历史会话列表是空的？**
+**Q：`/snapshot-prompt` 的历史会话列表是空的？**
 
-A：正常情况下不该为空——skill 触发时会**自动跑一次 backfill**，给当前项目下所有历史 jsonl（含装插件前就存在的）补索引，所以装好后**首次**取历史就应看到当前项目的全部会话。若仍为空，按顺序排查：
+A：**多数情况是没启用 SessionEnd hook**——本仓库默认不会自动给你注册 hook（避免动你的 `~/.claude/settings.json`），所以 meta 索引一直没人写、picker 自然就空。要启用，按 [可选：启用跨会话历史（手动注册 SessionEnd hook）](#可选启用跨会话历史手动注册-sessionend-hook) 段配置一次。
 
-1. **确认 `python` 可用** —— 自动 backfill 与 SessionEnd hook 都靠 `python "<脚本>" ...` 调脚本（兼容 Python 3.7+）。若你机器上 `python` 这个命令不存在（Windows 常见是 `py -3`、部分 Linux/mac 是 `python3`），自动 backfill 会静默跳过、hook 也不生成 meta。编辑 plugin 的 `snapshot_prompt/hooks/hooks.json` 把 `python` 换成正确的解释器命令，再重启。详见[跨平台说明](#跨平台说明hook-解释器)。
-2. **重启 Claude Code** —— 装 plugin 之前打开的 session，其 SessionEnd hook 不生效；重启后新 session 才会在结束时触发（自动 backfill 不受此影响，但重启能排除 plugin 未完全加载的情况）。
-3. **手动兜底 backfill** —— 自动 backfill 没解决时，可手动跑一次确认脚本本身工作：
+如果你**确认已经配置过 hook**但仍为空：
+
+1. **检查 `python` 命令是否可用** —— hook 里默认调 `python "<脚本>"`，若你机器上 `python` 这个命令不存在（Windows 常见是 `py -3`、部分 Linux/mac 是 `python3`），hook 会静默失败。把 `~/.claude/settings.json` 里 hook 命令的 `python` 改成对应解释器再重启。
+2. **重启 Claude Code** —— 改完 settings.json 后必须重启才生效。
+3. **手动跑一次 backfill 兜底** —— 给已存在的历史 session 补 meta：
    ```
-   python <解压目录>/snapshot_prompt/scripts/write_session_meta.py --backfill
+   python <仓库路径>/snapshot_prompt/scripts/write_session_meta.py --backfill
    ```
 
 **Q：skill 改我 `~/.claude/` 安全吗？**
 
-A：本 plugin **不让 skill 自己改你的 `~/.claude/settings.json`**——hook 由 plugin 框架在安装时统一注册，脚本随 plugin 分发（约 120 行纯 stdlib、无网络调用、无外发数据，源码见 [`snapshot_prompt/scripts/write_session_meta.py`](snapshot_prompt/scripts/write_session_meta.py)）。meta 文件只写到 `~/.claude/projects/` 你本机，不进 git、不上传。
+A：本 skill **不会自动改你的 `~/.claude/settings.json`**——SessionEnd hook 必须由你显式拷贝到 settings.json 才生效（见下文可选段）。脚本本身（[`snapshot_prompt/scripts/write_session_meta.py`](snapshot_prompt/scripts/write_session_meta.py)，约 120 行纯 stdlib、无网络调用、无外发数据）只读 `~/.claude/projects/` 下你本机的 session jsonl，写一份同目录的 `<uuid>.meta.json` 索引；不进 git、不上传。配置 hook 前你可以自行 review 脚本和 [`snapshot_prompt/hooks/hooks.json`](snapshot_prompt/hooks/hooks.json) 模板再决定加不加。
 
 **Q：我已经 commit 了才想起来存证，怎么办？**
 
-A：仍可触发 —— skill 会基于当前会话 + 历史 session 生成存证，文件指向已 commit 的 short hash 即可。
+A：仍可触发 —— skill 会基于当前会话 + 历史 session（若启用）生成存证，文件指向已 commit 的 short hash 即可。
 
 **Q：同事的产物文件能在我机器上 review 吗？**
 
@@ -177,20 +171,49 @@ A：能——前提是你把产物归档到了共享渠道。最常见是 git �
 - 存证产物（`prompt-snapshots/*.md`）是唯一可能被你分享出去的部分——落盘前会跑脱敏审查；之后进不进 git、贴不贴 wiki 由你决定。
 - 同事看不到你本地的会话内容；共享的只有你主动归档（如 commit）的存证 markdown。
 
-## 跨平台说明（hook 解释器）
+## 可选：启用跨会话历史（手动注册 SessionEnd hook）
 
-[`snapshot_prompt/hooks/hooks.json`](snapshot_prompt/hooks/hooks.json) 里的 hook 命令默认用 `python`：
+跨会话历史靠一个 SessionEnd hook：每次 Claude Code session 结束时跑一次 [`scripts/write_session_meta.py`](snapshot_prompt/scripts/write_session_meta.py)，给该 session 写一份侧车 `<uuid>.meta.json`（与 jsonl 同目录、即 `~/.claude/projects/<proj>/`），里面有 session_id / git_branch / cwd / timestamp / 首条消息摘要 / user_turns 等字段——这是 `/snapshot-prompt` 历史会话 picker 的索引来源。
 
-```json
-"command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/write_session_meta.py\""
-```
+**配置步骤：**
 
-脚本是纯 stdlib、无第三方依赖，兼容 **Python 3.7+**（已用 `from __future__ import annotations` 消除高版本注解语法的门槛），常见环境基本开箱即用。
+1. **找到脚本绝对路径**——例如本仓库 clone 到 `D:\code\snapshot-prompt`，脚本在 `D:\code\snapshot-prompt\snapshot_prompt\scripts\write_session_meta.py`；若复制到 `~/.claude/skills/snapshot-prompt/` 则需把 `scripts/` 一并复制过去。
 
-若你机器上 `python` 这个命令不存在或不指向 Python 3.7+，把 `hooks.json` 里的 `python` 改成对应命令再重启 Claude Code：
+2. **编辑 `~/.claude/settings.json`**，把下面片段并入（已存在 `hooks.SessionEnd` 时只追加新对象，别整段覆盖）：
 
-- **Windows**：通常用 `py -3`
-- **macOS / Linux**：通常用 `python3`
+   ```json
+   {
+     "hooks": {
+       "SessionEnd": [
+         {
+           "matcher": "",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "python \"D:/code/snapshot-prompt/snapshot_prompt/scripts/write_session_meta.py\""
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+   - 把 `python` 换成你机器上的 Python 解释器命令：**Windows** 常用 `py -3`、**macOS / Linux** 常用 `python3`。
+   - 路径用绝对路径；Windows 上正斜杠 `/` 或转义反斜杠 `\\` 都行。
+   - 脚本是纯 stdlib、无第三方依赖，兼容 **Python 3.7+**。
+
+   参考模板：[`snapshot_prompt/hooks/hooks.json`](snapshot_prompt/hooks/hooks.json)（用 `${CLAUDE_PLUGIN_ROOT}` 占位，是给未来 plugin 形态预留的；手动注册时用绝对路径替换）。
+
+3. **重启 Claude Code**。
+
+4. **首次启用时手动跑一次 backfill**，给安装 hook 之前就存在的历史 session 补 meta（之后新 session 会自动写）：
+
+   ```
+   python <脚本路径> --backfill
+   ```
+
+完成后再触发 `/snapshot-prompt`，picker 就能看到当前项目的全部历史会话。
 
 ## 自定义落盘目录
 
@@ -200,31 +223,14 @@ A：能——前提是你把产物归档到了共享渠道。最常见是 git �
 
 ```
 .
-├── .claude-plugin/
-│   └── marketplace.json          # 市场清单（市场名 xinguan-analysis），source → ./snapshot_prompt
-├── snapshot_prompt/              # plugin 本体
-│   ├── .claude-plugin/
-│   │   └── plugin.json           # plugin manifest
+├── snapshot_prompt/
 │   ├── skills/
 │   │   └── snapshot-prompt/
 │   │       └── SKILL.md          # AI 执行规范（命名规范 / 脱敏 / 触发流程，全内联）
 │   ├── hooks/
-│   │   └── hooks.json            # SessionEnd hook 声明（plugin 安装时自动注册）
+│   │   └── hooks.json            # SessionEnd hook 配置模板（可选启用，需手动拷到 ~/.claude/settings.json）
 │   └── scripts/
-│       └── write_session_meta.py # 给 session jsonl 写侧车 meta.json 的脚本
-└── README.md                     # 本文件（唯一面向人的说明）
+│       └── write_session_meta.py # 给 session jsonl 写侧车 meta.json 的脚本（~120 行 stdlib-only）
+├── README.md                     # 本文件（中文，唯一面向人的说明）
+└── README_EN.md                  # 英文版 README
 ```
-
-> 市场清单 `marketplace.json` 在**仓库根** `.claude-plugin/` 下，`/plugin marketplace add` 默认从仓库根扫描；其 `source: "./snapshot_prompt"` 指向 plugin 本体目录（内含 `.claude-plugin/plugin.json`）。
-
-## 维护：打包分发 zip
-
-分发用的 `snapshot-prompt-plugin.zip` 是构建产物（已被 `.gitignore` 忽略，不进仓）。需要出新包时，在仓库根执行（git 自带 `git archive`，PowerShell / git bash 均可）：
-
-```
-git archive --format=zip --prefix=snapshot-prompt/ HEAD -o snapshot-prompt-plugin.zip README.md .claude-plugin snapshot_prompt
-```
-
-- 从 `HEAD` 打包，自动只含已提交内容（不含 `.git` / `__pycache__` / 本地配置），所以**打包前先把改动 commit**。
-- 解压后顶层是 `snapshot-prompt/`，内含仓库根 `marketplace.json` + `snapshot_prompt/`，即上文「安装」所需的目录结构。
-- 把生成的 zip 发给同事即可，安装步骤见上文「安装（离线 zip，零认证）」。
