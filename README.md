@@ -12,6 +12,8 @@ Purpose: 单一权威 README —— 市场介绍 + 安装 + 用法 + 故障排�
 
 > 📑 本文件是**唯一面向人的说明**（介绍 / 安装 / 用法 / 故障排查 / 维护）。另有一份 [`snapshot_prompt/skills/snapshot-prompt/SKILL.md`](snapshot_prompt/skills/snapshot-prompt/SKILL.md) 是 **AI 执行规范**（Claude Code 加载它来驱动 `/snapshot-prompt` 的行为），不是给人读的，一般无需打开。
 
+> 🌏 English version: see [`README_EN.md`](README_EN.md).
+
 ## 目录
 
 - [这个插件解决什么问题](#这个插件解决什么问题)
